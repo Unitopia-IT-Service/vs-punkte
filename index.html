@@ -1,0 +1,129 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light"><meta name="theme-color" content="#1f4e8c">
+<link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
+<title>VS-Punkte</title><style>
+:root{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#20242b;background:#f3f5f8;--line:#d8dee7;--ac:#1f4e8c}
+*{box-sizing:border-box}body{margin:0;padding:0 0 40px}
+.wrap{max-width:980px;margin:auto;padding:0 10px}
+header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #dce1e8;padding:calc(8px + env(safe-area-inset-top)) 0 10px}
+h1{font-size:19px;margin:0 0 2px}.s{font-size:12.5px;color:#5d6673;margin:2px 0 0}
+.bar{display:flex;gap:6px;margin-top:8px}
+.bar input{flex:1;min-width:0}
+input[type=search],.add input,.nm{height:40px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font-size:16px}
+button{height:40px;border:0;border-radius:8px;background:var(--ac);color:#fff;font-size:14px;padding:0 12px}
+button.x{background:#eef2f7;color:#20242b;width:100%;margin-top:14px}
+.m{background:#fff;border:1px solid #dce1e8;border-radius:12px;padding:12px;margin:10px 0}
+h2{font-size:16px;margin:0 0 8px}
+.g{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+@media(max-width:560px){.g{grid-template-columns:repeat(3,1fr)}}
+label span{display:block;font-size:11px;font-weight:650;color:#3e4855;background:#eef2f7;padding:5px 2px;text-align:center;border:1px solid var(--line);border-bottom:0;border-radius:6px 6px 0 0}
+input.v{width:100%;height:44px;border:1px solid var(--line);border-radius:0 0 6px 6px;text-align:center;font-size:16px;font-variant-numeric:tabular-nums}
+input.v:focus{outline:2px solid #5b91d6;outline-offset:-2px;background:#f0f7ff}
+.low{background:#fde8e8!important;color:#b3261e;font-weight:700;border-color:#e57373!important}
+dialog{width:min(94vw,640px);max-height:88vh;border:0;border-radius:14px;padding:16px;overflow:auto}
+dialog::backdrop{background:#0007}
+dialog h2{font-size:18px}
+.add{display:flex;gap:6px;margin-bottom:10px}.add input{flex:1;min-width:0}
+.mr{display:flex;gap:6px;align-items:center;margin-bottom:6px}.mr span{width:28px;text-align:right;color:#687384;font-size:13px}
+.nm{flex:1;min-width:0}.mr button{background:#fde8e8;color:#b3261e;width:40px;padding:0}
+.col{display:grid;gap:8px}select{width:100%;height:42px;font-size:15px;margin-bottom:6px}
+.sc{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:520px;font-size:13px}
+th,td{border:1px solid var(--line);padding:6px 4px;text-align:center;font-variant-numeric:tabular-nums}
+th{background:#eef2f7}td.n{text-align:left;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style></head><body>
+<header><div class="wrap"><h1>VS-Punkte – Mitgliederliste</h1><p class="s" id="info"></p>
+<div class="bar"><input id="q" type="search" placeholder="Mitglied suchen" autocomplete="off"><button id="bh">Verlauf</button><button id="bm">Mitglieder</button><button id="bb">Backup</button></div></div></header>
+<main class="wrap" id="list"></main>
+<dialog id="dlg"><div id="dc"></div><button class="x" id="dx">Schließen</button></dialog>
+<script>
+const DAYS=['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'],KEY='vsp-v1',LOW=5e6,KEEP=30,NAMES=["Dima", "sofasaurus", "SyNtRaX", "Schäfchen", "Nordlicht", "Shiroe sensei", "Sabrina", "Sur", "Алексей 52 RUS", "S.C.A.M 727", "Катерина", "Dromi 26", "Katja", "Emilia", "Tine", "Brookster", "Khaleesi", "Zauberberg", "VIACHASLAU", "Era", "женя1983брест", "маковка", "DonCorleone", "Marysay", "Арман", "Abegilr", "Kocur", "Круэлла", "Peacekeeper", "Vladislava", "BGLucifer", "Crash", "Natali94", "Kabed", "Oiselet", "Ziaboleq", "MeZaRKaBuL", "LEONARDO", "ALFi", "MJay", "Nikos", "Ravnex", "Pierre", "Наталья", "Nata Perez", "Martin 46", "Nicole", "Eule123", "Rastafc", "Аника", "Svetik.727", "Bierbauch", "Gorillag", "киткат", "Boerk", "Pebbles", "Remi", "Yurinna", "Стас", "ChtiBiloute62", "Ruslan24", "Lacci", "Sandra 85", "CAHEK", "Irisha", "Peach", "ЕВГЕН", "CptBarbo", "DanyD4444", "Fallen ANngel", "Olga25", "Lilliana", "Alinnnn7", "Ophelia", "Ross1927", "stefi", "Fungus_SCIENCE", "mutsdog", "Organza", "uFo", "Witchhunter", "Kramer", "Алексей 1", "Ruben", "Finsterwald", "Kuramax"];
+let S;const $=id=>document.getElementById(id),dlg=$('dlg'),dc=$('dc'),L=$('list');
+const pad=n=>String(n).padStart(2,'0'),iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parse=s=>{const[a,b,c]=s.split('-').map(Number);return new Date(a,b-1,c)};
+const addD=(s,n)=>{const d=parse(s);d.setDate(d.getDate()+n);return iso(d)};
+const sunday=d=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-x.getDay());return iso(x)};
+const fmt=s=>{const d=parse(s);return pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.'},fd=s=>fmt(s)+parse(s).getFullYear();
+const wk=s=>fmt(s)+' – '+fd(addD(s,5));
+const num=v=>{const n=String(v||'').replace(/\D/g,'');return n?Number(n):null};
+const show=v=>String(v||'').replace(/\D/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+const cls=(v,j)=>j===1&&num(v)!==null&&num(v)<LOW?'low':'';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){alert('Speichern fehlgeschlagen. Ist der Speicher voll? Bitte ein Backup machen.')}};
+
+function rollover(){
+  const cur=sunday(new Date());
+  if(S.start<cur){
+    if(Object.values(S.vals).some(r=>r&&r.some(x=>x)))
+      S.hist.unshift({start:addD(S.start,1),end:addD(S.start,7),rows:S.members.map(m=>({n:m.name,v:(S.vals[m.id]||[]).slice()}))});
+    S.vals={};S.start=cur;
+  }
+  S.hist=S.hist.filter(h=>(new Date()-parse(h.end))/864e5<=KEEP);
+}
+function load(){
+  try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+  if(!S||!S.members)S={members:NAMES.map((n,i)=>({id:i+1,name:n})),next:NAMES.length+1,vals:{},start:sunday(new Date()),hist:[]};
+  rollover();save();
+}
+function render(){
+  $('info').textContent='Woche Mo '+fmt(addD(S.start,1))+' – Sa '+fmt(addD(S.start,6))+'. Leerung Sonntag '+fmt(addD(S.start,7))+' um 00:00. Dienstag unter 5.000.000 ist rot.';
+  const q=$('q').value.trim().toLowerCase();
+  L.innerHTML=S.members.map((m,i)=>{
+    if(q&&!m.name.toLowerCase().includes(q))return '';
+    const v=S.vals[m.id]||[];
+    return `<section class="m"><h2>${i+1}. ${esc(m.name)}</h2><div class="g">${DAYS.map((d,j)=>`<label><span>${d}</span><input class="v ${cls(v[j],j)}" inputmode="numeric" data-m="${m.id}" data-d="${j}" value="${show(v[j])}"></label>`).join('')}</div></section>`;
+  }).join('')||'<p class="s">Kein Mitglied gefunden.</p>';
+}
+L.addEventListener('input',e=>{const t=e.target;t.value=t.value.replace(/\D/g,'');
+  (S.vals[t.dataset.m]||=Array(6).fill(''))[t.dataset.d]=t.value;
+  t.classList.toggle('low',+t.dataset.d===1&&t.value!==''&&+t.value<LOW);save()});
+L.addEventListener('focusin',e=>{if(e.target.matches('input'))e.target.value=e.target.value.replace(/\D/g,'')});
+L.addEventListener('focusout',e=>{if(e.target.matches('input'))e.target.value=show(e.target.value)});
+$('q').oninput=render;
+
+const openD=h=>{dc.innerHTML=h;if(!dlg.open)dlg.showModal()};
+$('dx').onclick=()=>dlg.close();dlg.onclose=render;
+
+function memD(){openD('<h2>Mitglieder</h2><div class="add"><input id="nn" placeholder="Neuer Name"><button id="na">Hinzufügen</button></div>'+
+  S.members.map((m,i)=>`<div class="mr"><span>${i+1}.</span><input class="nm" data-id="${m.id}" value="${esc(m.name)}"><button data-del="${m.id}" aria-label="Löschen">✕</button></div>`).join(''))}
+function hisD(i=0){
+  if(!S.hist.length)return openD('<h2>Verlauf</h2><p>Noch kein Eintrag. Der erste entsteht am nächsten Sonntag um 00:00, wenn die Tabelle geleert wird. Einträge bleiben 30 Tage erhalten.</p>');
+  const h=S.hist[i];
+  openD(`<h2>Verlauf</h2><select id="hs">${S.hist.map((x,k)=>`<option value="${k}"${k===i?' selected':''}>${wk(x.start)}</option>`).join('')}</select>
+  <p class="s">Nur Ansicht. Dieser Eintrag wird am ${fd(addD(h.end,KEEP))} automatisch gelöscht.</p>
+  <div class="sc"><table><tr><th>Name</th>${DAYS.map(d=>`<th>${d.slice(0,2)}</th>`).join('')}</tr>${h.rows.map(r=>`<tr><td class="n">${esc(r.n)}</td>${DAYS.map((_,j)=>`<td class="${cls(r.v[j],j)}">${show(r.v[j])}</td>`).join('')}</tr>`).join('')}</table></div>`);
+}
+function bakD(){openD(`<h2>Backup und Export</h2><div class="col"><button data-a="json">Backup speichern (JSON)</button><button data-a="load">Backup laden</button><button data-a="csv">Aktuelle Woche (CSV für Excel)</button><button data-a="csvh">Verlauf (CSV für Excel)</button></div>
+  <p class="s">Das Backup enthält alle Mitglieder, Punkte und den Verlauf. Mach eins, bevor du das Handy wechselst oder die App neu installierst.</p><input type="file" id="fl" accept=".json,application/json" hidden>`)}
+$('bh').onclick=()=>hisD();$('bm').onclick=memD;$('bb').onclick=bakD;
+
+function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5e3)}
+const csv=rows=>'\ufeff'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+const today=()=>iso(new Date());
+async function restore(f){
+  try{const d=JSON.parse(await f.text());if(!Array.isArray(d.members)||!d.vals||!Array.isArray(d.hist))throw 0;
+    if(!confirm('Alle aktuellen Daten durch das Backup ersetzen?'))return;
+    S=d;S.next=S.next||Math.max(0,...S.members.map(m=>m.id))+1;rollover();save();dlg.close();
+  }catch(e){alert('Diese Datei ist kein gültiges Backup.')}
+}
+dc.addEventListener('click',e=>{const t=e.target;
+  if(t.id==='na'){const n=$('nn').value.trim();if(n){S.members.push({id:S.next++,name:n});save();memD()}}
+  if(t.dataset.del){const m=S.members.find(x=>x.id==t.dataset.del);
+    if(m&&confirm('„'+m.name+'“ löschen? Die Punkte der aktuellen Woche gehen verloren, der Verlauf bleibt.')){S.members=S.members.filter(x=>x!==m);delete S.vals[m.id];save();memD()}}
+  const a=t.dataset.a;
+  if(a==='json')dl('vs-punkte-backup-'+today()+'.json',JSON.stringify(S),'application/json');
+  if(a==='load')$('fl').click();
+  if(a==='csv')dl('vs-punkte-woche-'+today()+'.csv',csv([['Name',...DAYS],...S.members.map(m=>[m.name,...DAYS.map((_,j)=>num((S.vals[m.id]||[])[j])??'')])]),'text/csv');
+  if(a==='csvh')dl('vs-punkte-verlauf-'+today()+'.csv',csv([['Woche','Name',...DAYS],...S.hist.flatMap(h=>h.rows.map(r=>[wk(h.start),r.n,...DAYS.map((_,j)=>num(r.v[j])??'')]))]),'text/csv');
+});
+dc.addEventListener('change',e=>{const t=e.target;
+  if(t.classList.contains('nm')){const m=S.members.find(x=>x.id==t.dataset.id),n=t.value.trim();if(n){m.name=n;save()}else t.value=m.name}
+  if(t.id==='hs')hisD(+t.value);
+  if(t.id==='fl'&&t.files[0])restore(t.files[0]);
+});
+const chk=()=>{if(sunday(new Date())>S.start){rollover();save();render()}};
+setInterval(chk,6e4);document.addEventListener('visibilitychange',chk);
+load();render();
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
