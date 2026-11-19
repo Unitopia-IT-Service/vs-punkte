@@ -47,7 +47,7 @@ const fmt=s=>{const d=parse(s);return pad(d.getDate())+'.'+pad(d.getMonth()+1)+'
 const wk=s=>fmt(s)+' – '+fd(addD(s,5));
 const num=v=>{const n=String(v||'').replace(/\D/g,'');return n?Number(n):null};
 const show=v=>String(v||'').replace(/\D/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
-const cls=(v,j)=>j===1&&num(v)!==null&&num(v)<LOW?'low':'';
+const cls=v=>num(v)!==null&&num(v)<LOW?'low':'';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){alert('Speichern fehlgeschlagen. Ist der Speicher voll? Bitte ein Backup machen.')}};
 
@@ -66,7 +66,7 @@ function load(){
   rollover();save();
 }
 function render(){
-  $('info').textContent='Woche Mo '+fmt(addD(S.start,1))+' – Sa '+fmt(addD(S.start,6))+'. Leerung Sonntag '+fmt(addD(S.start,7))+' um 00:00. Dienstag unter 5.000.000 ist rot.';
+  $('info').textContent='Woche Mo '+fmt(addD(S.start,1))+' – Sa '+fmt(addD(S.start,6))+'. Leerung Sonntag '+fmt(addD(S.start,7))+' um 00:00. Alles unter 5.000.000 ist rot.';
   const q=$('q').value.trim().toLowerCase();
   L.innerHTML=S.members.map((m,i)=>{
     if(q&&!m.name.toLowerCase().includes(q))return '';
@@ -76,7 +76,7 @@ function render(){
 }
 L.addEventListener('input',e=>{const t=e.target;t.value=t.value.replace(/\D/g,'');
   (S.vals[t.dataset.m]||=Array(6).fill(''))[t.dataset.d]=t.value;
-  t.classList.toggle('low',+t.dataset.d===1&&t.value!==''&&+t.value<LOW);save()});
+  t.classList.toggle('low',t.value!==''&&+t.value<LOW);save()});
 L.addEventListener('focusin',e=>{if(e.target.matches('input'))e.target.value=e.target.value.replace(/\D/g,'')});
 L.addEventListener('focusout',e=>{if(e.target.matches('input'))e.target.value=show(e.target.value)});
 $('q').oninput=render;
