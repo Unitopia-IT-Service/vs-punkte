@@ -33,9 +33,10 @@ th,td{border:1px solid var(--line);padding:6px 4px;text-align:center;font-varian
 th{background:#eef2f7}td.n{text-align:left;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sync{min-height:16px}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#20242b;color:#fff;padding:11px 16px;border-radius:10px;font-size:14px;z-index:99;display:none;max-width:92vw;text-align:center}
+@media(max-width:560px){.bar{flex-wrap:wrap}.bar input{flex:1 1 100%}.bar button{flex:1 1 auto}}
 </style></head><body>
 <header><div class="wrap"><h1>VS-Punkte – Mitgliederliste</h1><p class="s" id="info"></p><p class="s" id="sync"></p>
-<div class="bar"><input id="q" type="search" placeholder="Mitglied suchen" autocomplete="off"><button id="bh">Verlauf</button><button id="bm">Mitglieder</button><button id="bb">Backup</button></div></div></header>
+<div class="bar"><input id="q" type="search" placeholder="Mitglied suchen" autocomplete="off"><button id="bh">Verlauf</button><button id="bm">Mitglieder</button><button id="bb">Backup und Export</button></div></div></header>
 <main class="wrap" id="list"></main>
 <div id="toast" role="status"></div>
 <dialog id="dlg"><div id="dc"></div><button class="x" id="dx">Schließen</button></dialog>
