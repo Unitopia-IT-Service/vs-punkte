@@ -31,11 +31,15 @@ dialog h2{font-size:18px}
 .sc{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:520px;font-size:13px}
 th,td{border:1px solid var(--line);padding:6px 4px;text-align:center;font-variant-numeric:tabular-nums}
 th{background:#eef2f7}td.n{text-align:left;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sync{min-height:16px}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#20242b;color:#fff;padding:11px 16px;border-radius:10px;font-size:14px;z-index:99;display:none;max-width:92vw;text-align:center}
 </style></head><body>
-<header><div class="wrap"><h1>VS-Punkte – Mitgliederliste</h1><p class="s" id="info"></p>
+<header><div class="wrap"><h1>VS-Punkte – Mitgliederliste</h1><p class="s" id="info"></p><p class="s" id="sync"></p>
 <div class="bar"><input id="q" type="search" placeholder="Mitglied suchen" autocomplete="off"><button id="bh">Verlauf</button><button id="bm">Mitglieder</button><button id="bb">Backup</button></div></div></header>
 <main class="wrap" id="list"></main>
+<div id="toast" role="status"></div>
 <dialog id="dlg"><div id="dc"></div><button class="x" id="dx">Schließen</button></dialog>
+<script src="config.js"></script>
 <script>
 const DAYS=['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'],KEY='vsp-v1',LOW=5e6,KEEP=30,NAMES=["Dima", "sofasaurus", "SyNtRaX", "Schäfchen", "Nordlicht", "Shiroe sensei", "Sabrina", "Sur", "Алексей 52 RUS", "S.C.A.M 727", "Катерина", "Dromi 26", "Katja", "Emilia", "Tine", "Brookster", "Khaleesi", "Zauberberg", "VIACHASLAU", "Era", "женя1983брест", "маковка", "DonCorleone", "Marysay", "Арман", "Abegilr", "Kocur", "Круэлла", "Peacekeeper", "Vladislava", "BGLucifer", "Crash", "Natali94", "Kabed", "Oiselet", "Ziaboleq", "MeZaRKaBuL", "LEONARDO", "ALFi", "MJay", "Nikos", "Ravnex", "Pierre", "Наталья", "Nata Perez", "Martin 46", "Nicole", "Eule123", "Rastafc", "Аника", "Svetik.727", "Bierbauch", "Gorillag", "киткат", "Boerk", "Pebbles", "Remi", "Yurinna", "Стас", "ChtiBiloute62", "Ruslan24", "Lacci", "Sandra 85", "CAHEK", "Irisha", "Peach", "ЕВГЕН", "CptBarbo", "DanyD4444", "Fallen ANngel", "Olga25", "Lilliana", "Alinnnn7", "Ophelia", "Ross1927", "stefi", "Fungus_SCIENCE", "mutsdog", "Organza", "uFo", "Witchhunter", "Kramer", "Алексей 1", "Ruben", "Finsterwald", "Kuramax"];
 let S;const $=id=>document.getElementById(id),dlg=$('dlg'),dc=$('dc'),L=$('list');
@@ -51,6 +55,83 @@ const cls=v=>num(v)!==null&&num(v)<LOW?'low':'';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){alert('Speichern fehlgeschlagen. Ist der Speicher voll? Bitte ein Backup machen.')}};
 
+
+/* ===== Gemeinsame Daten (Supabase, ohne Anmeldung) ===== */
+const CFG=window.VSP_CONFIG||{},ON=!!(CFG.SUPABASE_URL&&CFG.SUPABASE_KEY&&!/DEIN/i.test(CFG.SUPABASE_URL+CFG.SUPABASE_KEY)),OK='vsp-ops';
+let OPS=[],busy=false,again=false,first=true,tm;
+try{OPS=JSON.parse(localStorage.getItem(OK)||'[]')}catch(e){}
+const pOps=()=>{try{localStorage.setItem(OK,JSON.stringify(OPS))}catch(e){}};
+const stat=t=>{const el=$('sync');if(el)el.textContent=t};
+const schedule=()=>{if(!ON)return;clearTimeout(tm);tm=setTimeout(sync,700)};
+function apply(o){
+  if(o.t==='v'){if(S.members.some(m=>m.id==o.m))(S.vals[o.m]||=Array(6).fill(''))[o.d]=o.v}
+  else if(o.t==='a')S.members.push({id:S.next++,name:o.name});
+  else if(o.t==='d'){S.members=S.members.filter(m=>m.id!=o.id);delete S.vals[o.id]}
+  else if(o.t==='r'){const m=S.members.find(m=>m.id==o.id);if(m)m.name=o.name}
+  else if(o.t==='x'){S=JSON.parse(JSON.stringify(o.data));S.next=S.next||Math.max(0,...S.members.map(m=>m.id))+1;rollover()}
+}
+function op(o){
+  apply(o);save();
+  if(!ON)return;
+  if(o.t==='v')OPS=OPS.filter(p=>!(p.t==='v'&&p.m==o.m&&p.d==o.d));
+  OPS.push(o);pOps();schedule();
+}
+async function api(m,p,b){
+  const hd={apikey:CFG.SUPABASE_KEY,'Content-Type':'application/json',Prefer:'return=representation'};
+  if(/^eyJ/.test(CFG.SUPABASE_KEY))hd.Authorization='Bearer '+CFG.SUPABASE_KEY;
+  const r=await fetch(CFG.SUPABASE_URL+'/rest/v1/'+p,{method:m,headers:hd,body:b?JSON.stringify(b):undefined});
+  if(!r.ok)throw new Error('Server '+r.status);
+  return r.json();
+}
+function refresh(){
+  if(dlg.open)return;
+  const a=document.activeElement;
+  if(a&&a.matches&&a.matches('input.v')){
+    $('info').textContent=infoText();
+    document.querySelectorAll('input.v').forEach(i=>{if(i===a)return;const v=(S.vals[i.dataset.m]||[])[i.dataset.d];i.value=show(v);i.classList.toggle('low',num(v)!==null&&num(v)<LOW)});
+  }else render();
+}
+async function sync(){
+  if(!ON)return;
+  if(busy){again=true;return}
+  busy=true;
+  try{
+    let ok=false;
+    for(let i=0;i<5&&!ok;i++){
+      stat('Synchronisiere …');
+      const row=(await api('GET','vsp_state?id=eq.1&select=data,version'))[0];
+      if(!row)throw new Error('Tabelle vsp_state nicht gefunden');
+      const before=JSON.stringify(S),srv=JSON.stringify(row.data);let seed=false;
+      if(row.data&&Array.isArray(row.data.members)){
+        S=row.data;S.vals=S.vals||{};S.hist=S.hist||[];S.next=S.next||Math.max(0,...S.members.map(m=>m.id))+1;
+        rollover();OPS.forEach(apply);
+      }else seed=true;
+      const sent=OPS.slice();
+      if(!seed&&!sent.length&&JSON.stringify(S)===srv){ok=true}
+      else{
+        const w=await api('PATCH','vsp_state?id=eq.1&version=eq.'+row.version,{data:S,version:row.version+1});
+        if(w.length){OPS=OPS.filter(p=>!sent.includes(p));pOps();ok=true}
+      }
+      if(ok){save();if(first||JSON.stringify(S)!==before){first=false;refresh()}}
+    }
+    stat(ok?'✓ Synchronisiert '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'Konflikt – wird erneut versucht');
+    if(!ok)again=true;
+  }catch(e){
+    if(e instanceof TypeError)stat('Offline – Änderungen werden gesendet, sobald du online bist');
+    else stat('Fehler: '+e.message);
+  }
+  busy=false;
+  if(again){again=false;setTimeout(sync,1500)}
+}
+function start(){
+  load();render();
+  if(!ON)return;
+  sync();
+  setInterval(()=>{if(!document.hidden)sync()},12000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
+  addEventListener('online',sync);
+}
+
 function rollover(){
   const cur=sunday(new Date());
   if(S.start<cur){
@@ -65,8 +146,9 @@ function load(){
   if(!S||!S.members)S={members:NAMES.map((n,i)=>({id:i+1,name:n})),next:NAMES.length+1,vals:{},start:sunday(new Date()),hist:[]};
   rollover();save();
 }
+const infoText=()=>'Woche Mo '+fmt(addD(S.start,1))+' – Sa '+fmt(addD(S.start,6))+'. Leerung Sonntag '+fmt(addD(S.start,7))+' um 00:00. Alles unter 5.000.000 ist rot.';
 function render(){
-  $('info').textContent='Woche Mo '+fmt(addD(S.start,1))+' – Sa '+fmt(addD(S.start,6))+'. Leerung Sonntag '+fmt(addD(S.start,7))+' um 00:00. Alles unter 5.000.000 ist rot.';
+  $('info').textContent=infoText();
   const q=$('q').value.trim().toLowerCase();
   L.innerHTML=S.members.map((m,i)=>{
     if(q&&!m.name.toLowerCase().includes(q))return '';
@@ -75,8 +157,8 @@ function render(){
   }).join('')||'<p class="s">Kein Mitglied gefunden.</p>';
 }
 L.addEventListener('input',e=>{const t=e.target;t.value=t.value.replace(/\D/g,'');
-  (S.vals[t.dataset.m]||=Array(6).fill(''))[t.dataset.d]=t.value;
-  t.classList.toggle('low',t.value!==''&&+t.value<LOW);save()});
+  op({t:'v',m:t.dataset.m,d:+t.dataset.d,v:t.value});
+  t.classList.toggle('low',t.value!==''&&+t.value<LOW)});
 L.addEventListener('focusin',e=>{if(e.target.matches('input'))e.target.value=e.target.value.replace(/\D/g,'')});
 L.addEventListener('focusout',e=>{if(e.target.matches('input'))e.target.value=show(e.target.value)});
 $('q').oninput=render;
@@ -93,37 +175,117 @@ function hisD(i=0){
   <p class="s">Nur Ansicht. Dieser Eintrag wird am ${fd(addD(h.end,KEEP))} automatisch gelöscht.</p>
   <div class="sc"><table><tr><th>Name</th>${DAYS.map(d=>`<th>${d.slice(0,2)}</th>`).join('')}</tr>${h.rows.map(r=>`<tr><td class="n">${esc(r.n)}</td>${DAYS.map((_,j)=>`<td class="${cls(r.v[j],j)}">${show(r.v[j])}</td>`).join('')}</tr>`).join('')}</table></div>`);
 }
-function bakD(){openD(`<h2>Backup und Export</h2><div class="col"><button data-a="json">Backup speichern (JSON)</button><button data-a="load">Backup laden</button><button data-a="csv">Aktuelle Woche (CSV für Excel)</button><button data-a="csvh">Verlauf (CSV für Excel)</button></div>
-  <p class="s">Das Backup enthält alle Mitglieder, Punkte und den Verlauf. Mach eins, bevor du das Handy wechselst oder die App neu installierst.</p><input type="file" id="fl" accept=".json,application/json" hidden>`)}
+function bakD(){openD(`<h2>Backup, Export und PDF</h2><div class="col"><button data-a="pdf">PDF erstellen (aktuelle Woche)</button><button data-a="pdfr">PDF nur roter Bereich (unter 5.000.000)</button><button data-a="json">Backup speichern (JSON)</button><button data-a="load">Backup laden</button><button data-a="csv">Aktuelle Woche (CSV für Excel)</button><button data-a="csvh">Verlauf (CSV für Excel)</button></div>
+  <p class="s">Das Backup enthält alle Mitglieder, Punkte und den Verlauf. Mach eins, bevor du das Handy wechselst oder die App neu installierst.</p><p class="s">${"showSaveFilePicker" in window?"Beim Speichern öffnet sich die Dateiauswahl. Lege dort einmal im Ordner „Dokumente“ den Ordner „VS-Event-Backup“ an (⋮ → Neuer Ordner) und speichere darin. Die App merkt sich den Ordner.":"Dieses Gerät speichert Dateien im Ordner „Downloads“. In der Dateien-App kannst du sie nach „Dokumente/VS-Event-Backup“ verschieben."}</p><input type="file" id="fl" accept=".json,application/json" hidden>`)}
 $('bh').onclick=()=>hisD();$('bm').onclick=memD;$('bb').onclick=bakD;
 
-function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5e3)}
+let tt;function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(tt);tt=setTimeout(()=>t.style.display='none',4500)}
+async function dl(name,data,type){
+  const blob=data instanceof Blob?data:new Blob([data],{type});
+  if('showSaveFilePicker' in window){
+    try{
+      const h=await showSaveFilePicker({suggestedName:name,id:'vsp-backup',startIn:'documents',types:[{description:name.split('.').pop().toUpperCase()+'-Datei',accept:{[type]:['.'+name.split('.').pop()]}}]});
+      const w=await h.createWritable();await w.write(blob);await w.close();
+      toast('Gespeichert: '+h.name);return;
+    }catch(e){if(e&&e.name==='AbortError')return}
+  }
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5e3);
+  toast('Datei wurde im Ordner „Downloads“ gespeichert: '+name);
+}
+
+/* ===== PDF: nur Mitglieder mit mindestens einem Wert ab 1 ===== */
+function pdfFromJpegs(pgs,wpt,hpt){
+  const enc=new TextEncoder(),parts=[],offs=[];let len=0;
+  const add=x=>{const b=typeof x==='string'?enc.encode(x):x;parts.push(b);len+=b.length};
+  const obj=(n,fn)=>{offs[n]=len;add(n+' 0 obj\n');fn();add('endobj\n')};
+  const N=2+pgs.length*3;
+  add('%PDF-1.4\n');
+  obj(1,()=>add('<< /Type /Catalog /Pages 2 0 R >>\n'));
+  obj(2,()=>add('<< /Type /Pages /Count '+pgs.length+' /Kids ['+pgs.map((_,i)=>(3+i*3)+' 0 R').join(' ')+'] >>\n'));
+  pgs.forEach((p,i)=>{
+    const pg=3+i*3,ct=4+i*3,im=5+i*3,c='q '+wpt+' 0 0 '+hpt+' 0 0 cm /Im0 Do Q';
+    obj(pg,()=>add('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+wpt+' '+hpt+'] /Resources << /XObject << /Im0 '+im+' 0 R >> >> /Contents '+ct+' 0 R >>\n'));
+    obj(ct,()=>add('<< /Length '+c.length+' >>\nstream\n'+c+'\nendstream\n'));
+    obj(im,()=>{add('<< /Type /XObject /Subtype /Image /Width '+p.w+' /Height '+p.h+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+p.data.length+' >>\nstream\n');add(p.data);add('\nendstream\n')});
+  });
+  const xr=len;
+  add('xref\n0 '+(N+1)+'\n0000000000 65535 f \n');
+  for(let i=1;i<=N;i++)add(String(offs[i]).padStart(10,'0')+' 00000 n \n');
+  add('trailer\n<< /Size '+(N+1)+' /Root 1 0 R >>\nstartxref\n'+xr+'\n%%EOF');
+  const out=new Uint8Array(len);let o=0;parts.forEach(b=>{out.set(b,o);o+=b.length});
+  return new Blob([out],{type:'application/pdf'});
+}
+async function makePdf(red){
+  const hit=x=>{const n=num(x);return n!==null&&n>=1&&(!red||n<LOW)};
+  const rows=S.members.map((m,i)=>({nr:i+1,name:m.name,v:S.vals[m.id]||[]})).filter(r=>r.v.some(hit));
+  if(!rows.length){toast(red?'Niemand im roten Bereich (1 bis 4.999.999) in dieser Woche. Es gibt nichts für das PDF.':'Keine Einträge mit mindestens 1 in dieser Woche. Es gibt nichts für das PDF.');return null}
+  const W=1754,H=1240,M=70,RH=48,HH=56,TOP=190,BOT=90,per=Math.floor((H-TOP-HH-BOT)/RH),pages=Math.ceil(rows.length/per);
+  const nrW=70,dayW=190,nameW=W-2*M-nrW-6*dayW,F='"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif';
+  const d=new Date(),stamp=fd(iso(d))+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+  const jp=[];
+  for(let p=0;p<pages;p++){
+    const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+    x.fillStyle='#ffffff';x.fillRect(0,0,W,H);x.textBaseline='middle';x.textAlign='left';
+    x.fillStyle='#1f4e8c';x.font='bold 42px '+F;x.fillText(red?'VS-Punkte – Im roten Bereich':'VS-Punkte – Mitgliederliste',M,M+8);
+    x.fillStyle='#5d6673';x.font='24px '+F;
+    x.fillText('Woche Mo '+fmt(addD(S.start,1))+' – Sa '+fd(addD(S.start,6))+'   ·   '+rows.length+(red?' Mitglieder unter 5.000.000':' Mitglieder mit mindestens 1')+'   ·   erstellt am '+stamp,M,M+62);
+    let cx=M;const hy=TOP;
+    x.fillStyle='#1f4e8c';x.fillRect(M,hy,W-2*M,HH);
+    x.fillStyle='#ffffff';x.font='bold 24px '+F;
+    x.textAlign='left';x.fillText('Nr.',cx+14,hy+HH/2);x.fillText('Name',cx+nrW+14,hy+HH/2);
+    x.textAlign='center';
+    DAYS.forEach((_,j)=>x.fillText(DAYS[j].slice(0,2)+' '+fmt(addD(S.start,1+j)),M+nrW+nameW+j*dayW+dayW/2,hy+HH/2));
+    rows.slice(p*per,(p+1)*per).forEach((r,k)=>{
+      const y=hy+HH+k*RH;
+      if(k%2){x.fillStyle='#f3f5f8';x.fillRect(M,y,W-2*M,RH)}
+      x.fillStyle='#d8dee7';x.fillRect(M,y+RH-1,W-2*M,1);
+      x.fillStyle='#20242b';x.font='24px '+F;x.textAlign='left';
+      x.fillText(r.nr+'.',M+14,y+RH/2);
+      let nm=r.name;if(x.measureText(nm).width>nameW-28){while(nm.length>1&&x.measureText(nm+'…').width>nameW-28)nm=nm.slice(0,-1);nm+='…'}
+      x.font='bold 25px '+F;x.fillText(nm,M+nrW+14,y+RH/2);
+      DAYS.forEach((_,j)=>{
+        const v=r.v[j],t=show(v);if(!t)return;
+        const cxl=M+nrW+nameW+j*dayW,low=num(v)!==null&&num(v)<LOW;
+        if(low){x.fillStyle='#fde8e8';x.fillRect(cxl+4,y+3,dayW-8,RH-7)}
+        x.fillStyle=low?'#b3261e':'#20242b';x.font=(low?'bold ':'')+'25px '+F;x.textAlign='right';
+        x.fillText(t,cxl+dayW-16,y+RH/2);
+      });
+    });
+    x.fillStyle='#5d6673';x.font='21px '+F;x.textAlign='left';x.fillText(red?'Nur Mitglieder mit mindestens einem Wert von 1 bis 4.999.999 (rot).':'Rot = unter 5.000.000. Nur Mitglieder mit mindestens einem Wert ab 1.',M,H-48);
+    x.textAlign='right';x.fillText('Seite '+(p+1)+' von '+pages,W-M,H-48);
+    const b=await new Promise(res=>c.toBlob(res,'image/jpeg',.92));
+    jp.push({w:W,h:H,data:new Uint8Array(await b.arrayBuffer())});
+  }
+  return pdfFromJpegs(jp,841.89,595.28);
+}
 const csv=rows=>'\ufeff'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
 const today=()=>iso(new Date());
 async function restore(f){
   try{const d=JSON.parse(await f.text());if(!Array.isArray(d.members)||!d.vals||!Array.isArray(d.hist))throw 0;
-    if(!confirm('Alle aktuellen Daten durch das Backup ersetzen?'))return;
-    S=d;S.next=S.next||Math.max(0,...S.members.map(m=>m.id))+1;rollover();save();dlg.close();
+    if(!confirm('Alle aktuellen Daten durch das Backup ersetzen?'+(ON?' Das gilt für alle Personen.':'')))return;
+    op({t:'x',data:d});dlg.close();
   }catch(e){alert('Diese Datei ist kein gültiges Backup.')}
 }
 dc.addEventListener('click',e=>{const t=e.target;
-  if(t.id==='na'){const n=$('nn').value.trim();if(n){S.members.push({id:S.next++,name:n});save();memD()}}
+  if(t.id==='na'){const n=$('nn').value.trim();if(n){op({t:'a',name:n});memD()}}
   if(t.dataset.del){const m=S.members.find(x=>x.id==t.dataset.del);
-    if(m&&confirm('„'+m.name+'“ löschen? Die Punkte der aktuellen Woche gehen verloren, der Verlauf bleibt.')){S.members=S.members.filter(x=>x!==m);delete S.vals[m.id];save();memD()}}
+    if(m&&confirm('„'+m.name+'“ löschen? Die Punkte der aktuellen Woche gehen verloren, der Verlauf bleibt.')){op({t:'d',id:m.id});memD()}}
   const a=t.dataset.a;
+  if(['json','csv','csvh','pdf','pdfr'].includes(a))dlg.close();
+  if(a==='pdf'||a==='pdfr')makePdf(a==='pdfr').then(b=>{if(b)dl('vs-punkte-'+(a==='pdfr'?'rot':'woche')+'-'+today()+'.pdf',b,'application/pdf')}).catch(e=>{console.error(e);toast('PDF konnte nicht erstellt werden.')});
   if(a==='json')dl('vs-punkte-backup-'+today()+'.json',JSON.stringify(S),'application/json');
   if(a==='load')$('fl').click();
   if(a==='csv')dl('vs-punkte-woche-'+today()+'.csv',csv([['Name',...DAYS],...S.members.map(m=>[m.name,...DAYS.map((_,j)=>num((S.vals[m.id]||[])[j])??'')])]),'text/csv');
   if(a==='csvh')dl('vs-punkte-verlauf-'+today()+'.csv',csv([['Woche','Name',...DAYS],...S.hist.flatMap(h=>h.rows.map(r=>[wk(h.start),r.n,...DAYS.map((_,j)=>num(r.v[j])??'')]))]),'text/csv');
 });
 dc.addEventListener('change',e=>{const t=e.target;
-  if(t.classList.contains('nm')){const m=S.members.find(x=>x.id==t.dataset.id),n=t.value.trim();if(n){m.name=n;save()}else t.value=m.name}
+  if(t.classList.contains('nm')){const m=S.members.find(x=>x.id==t.dataset.id),n=t.value.trim();if(n)op({t:'r',id:m.id,name:n});else t.value=m.name}
   if(t.id==='hs')hisD(+t.value);
   if(t.id==='fl'&&t.files[0])restore(t.files[0]);
 });
-const chk=()=>{if(sunday(new Date())>S.start){rollover();save();render()}};
+const chk=()=>{if(S&&sunday(new Date())>S.start){rollover();save();render();schedule()}};
 setInterval(chk,6e4);document.addEventListener('visibilitychange',chk);
-load();render();
+start();
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script></body></html>
